@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Helsinki HCE Demo</string>
+    <string name="aiddescription">Helsinki AID</string>
+    <string name="servicedesc">Helsinki Host APDU Service</string>
+</resources>
