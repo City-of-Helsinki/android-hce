@@ -33,7 +33,7 @@ class HostCardEmulatorService: HostApduService() {
         }
         if (apdu.instruction == Apdu.Instruction.SELECT) {
             if (apdu.data != null && apdu.data contentEquals AID) {
-                return byteArrayOf(Apdu.Status.SUCCESS.toByte(), 0x00)
+                return statusResponse(Apdu.Status.SUCCESS)
             }
         }
         if (apdu.instruction == Apdu.Instruction.INTERNAL_AUTHENTICATE &&
