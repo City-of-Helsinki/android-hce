@@ -73,7 +73,7 @@ class Apdu {
 
     val status: Status?
 
-    fun getUnsignedShort(buffer: ByteBuffer): Int {
+    fun getUnsignedByte(buffer: ByteBuffer): Int {
         return 0x000000FF and buffer.get().toInt()
     }
 
@@ -96,14 +96,14 @@ class Apdu {
         }
 
         val buffer: ByteBuffer = ByteBuffer.wrap(commandApdu)
-        this.cls = getUnsignedShort(buffer)
-        this.instruction = Instruction.getMatching(getUnsignedShort(buffer))
-        this.parameter1 = getUnsignedShort(buffer)
-        this.parameter2 = getUnsignedShort(buffer)
-        this.contentLength = getUnsignedShort(buffer)
+        this.cls = getUnsignedByte(buffer)
+        this.instruction = Instruction.getMatching(getUnsignedByte(buffer))
+        this.parameter1 = getUnsignedByte(buffer)
+        this.parameter2 = getUnsignedByte(buffer)
+        this.contentLength = getUnsignedByte(buffer)
         this.data = ByteArray(this.contentLength)
         buffer.get(this.data)
-        this.expectedLength = getUnsignedShort(buffer)
+        this.expectedLength = getUnsignedByte(buffer)
         this.status = null
     }
 
