@@ -12,11 +12,13 @@ import fi.hel.helsinkihcedemo.defaultErrorResponse
  * Created by tituomin on 6.2.2018.
  */
 class HostCardEmulatorService: HostApduService() {
+    var applicationSelected: Boolean = false
     companion object {
         val TAG = "HelsinkiHostCardEmulator"
         val AID = Utils.hexStringToByteArray("F074756E6E697374616D6F")
     }
     override fun onDeactivated(reason: Int) {
+        applicationSelected = false
         Log.d(TAG, "Deactivated: " + reason)
     }
     override fun processCommandApdu(commandApdu: ByteArray?, extras: Bundle?): ByteArray {
@@ -33,11 +35,13 @@ class HostCardEmulatorService: HostApduService() {
         }
         if (apdu.instruction == Apdu.Instruction.SELECT) {
             if (apdu.data != null && apdu.data contentEquals AID) {
+                applicationSelected = true
                 return statusResponse(Apdu.Status.SUCCESS)
             }
         }
         if (apdu.instruction == Apdu.Instruction.INTERNAL_AUTHENTICATE &&
-            apdu.parameter1 == 1 && apdu.parameter2 == 1) {
+            apdu.parameter1 == 1 && apdu.parameter2 == 1 &&
+            applicationSelected) {
             return successResponse(ByteArray(1024, {i -> 100}))
         }
         return defaultErrorResponse()
