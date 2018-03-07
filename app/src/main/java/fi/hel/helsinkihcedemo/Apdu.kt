@@ -6,21 +6,49 @@ import java.nio.ByteOrder
 
 val TAG = "HelsinkiAPDU"
 
-fun statusResponse(error: Apdu.Status): ByteArray {
-    return byteArrayOf(error.toByte(), 0)
+fun intToUnsignedByte(value: Int): Byte {
+    return (value and 0xFF).toByte()
 }
 
-fun successResponse(data: ByteArray): ByteArray {
-    val result = ByteArray(data.size + 2)
-    val status = statusResponse(Apdu.Status.SUCCESS)
+fun statusResponse(sw1: Apdu.Status, sw2: Int = 0): ByteArray {
+    return byteArrayOf(sw1.toByte(), intToUnsignedByte(sw2))
+}
+
+fun setBody(data: ByteArray, result: ByteArray): Int {
     var i = 0
     while (i < data.size) {
         result[i] = data[i]
         i++
     }
+    return i
+}
+
+fun dataResponse(data: ByteArray, status: Apdu.Status, sw2: Int = 0): ByteArray {
+    val result = ByteArray(data.size + 2)
+    val st = statusResponse(status, sw2)
+    var i = setBody(data, result)
     while (i < result.size) {
-        result[i] = status[i - data.size]
+        result[i] = st[i - data.size]
         i++
+    }
+    return result
+}
+
+fun chainedDataResponse(data: ByteBuffer?, limit: Int): ByteArray {
+    if (data == null) {
+        return ByteArray(0)
+    }
+    val numBytes = minOf(limit, data.remaining())
+    var result = ByteArray(numBytes + 2)
+    data.get(result, 0, numBytes)
+    val remaining = data.remaining()
+    if (remaining > 0) {
+        result[numBytes] = Apdu.Status.CHAINED_RESPONSE.toByte()
+        result[numBytes+1] = intToUnsignedByte(remaining)
+    }
+    else {
+        result[numBytes] = Apdu.Status.SUCCESS.toByte()
+        result[numBytes+1] = 0
     }
     return result
 }
@@ -33,7 +61,7 @@ class Apdu {
     companion object {
         val AID = Utils.hexStringToByteArray("F074756E6E697374616D6F")
         val DEFAULT_CLA = 0x00
-        val MIN_APDU_LENGTH = 6
+        val MIN_APDU_LENGTH = 5
     }
     enum class MessageType {
         COMMAND, RESPONSE
@@ -42,6 +70,7 @@ class Apdu {
         SUCCESS(0x90),
         ERROR(0x6f),
         INSTRUCTION_NOT_SUPPORTED(0x6d),
+        CHAINED_RESPONSE(0x61),
         CLASS_NOT_SUPPORTED(0x6e);
         fun toByte(): Byte {
             return (this.value and 0xFF).toByte()
@@ -49,6 +78,8 @@ class Apdu {
     }
     enum class Instruction(val value: Int) {
         SELECT(0xa4),
+        EXTERNAL_AUTHENTICATE(0x82),
+        GET_RESPONSE(0xc0),
         INTERNAL_AUTHENTICATE(0x88);
         companion object {
              fun getMatching(value: Int): Instruction? {
@@ -77,10 +108,6 @@ class Apdu {
         return 0x000000FF and buffer.get().toInt()
     }
 
-    fun intToUnsignedByte(value: Int): Byte {
-        return (value and 0xFF).toByte()
-    }
-
     constructor (commandApdu: ByteArray) {
         this.messageType = MessageType.COMMAND
         if (commandApdu.size < MIN_APDU_LENGTH) {
@@ -100,10 +127,22 @@ class Apdu {
         this.instruction = Instruction.getMatching(getUnsignedByte(buffer))
         this.parameter1 = getUnsignedByte(buffer)
         this.parameter2 = getUnsignedByte(buffer)
-        this.contentLength = getUnsignedByte(buffer)
-        this.data = ByteArray(this.contentLength)
-        buffer.get(this.data)
-        this.expectedLength = getUnsignedByte(buffer)
+        if (this.instruction == Instruction.GET_RESPONSE) {
+            this.expectedLength = getUnsignedByte(buffer)
+            this.contentLength = null
+            this.data = null
+        }
+        else {
+            this.contentLength = getUnsignedByte(buffer)
+            this.data = ByteArray(this.contentLength)
+            buffer.get(this.data)
+            if (buffer.hasRemaining()) {
+                this.expectedLength = getUnsignedByte(buffer)
+            }
+            else {
+                this.expectedLength = null
+            }
+        }
         this.status = null
     }
 
