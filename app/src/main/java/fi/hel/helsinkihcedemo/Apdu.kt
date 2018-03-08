@@ -34,16 +34,18 @@ fun dataResponse(data: ByteArray, status: Apdu.Status, sw2: Int = 0): ByteArray 
     return result
 }
 
-fun chainedDataResponse(data: ByteBuffer?, limit: Int): ByteArray {
-    if (data == null) {
+fun chainedDataResponse(data: ByteBuffer?, limit: Int?): ByteArray {
+    if (data == null || limit == null) {
         return ByteArray(0)
     }
     val numBytes = minOf(limit, data.remaining())
     var result = ByteArray(numBytes + 2)
     data.get(result, 0, numBytes)
-    val remaining = data.remaining()
+    var remaining = data.remaining()
     if (remaining > 0) {
         result[numBytes] = Apdu.Status.CHAINED_RESPONSE.toByte()
+        if (remaining > 0x100)
+            remaining = 0x100
         result[numBytes+1] = intToUnsignedByte(remaining)
     }
     else {
@@ -123,12 +125,16 @@ class Apdu {
         }
 
         val buffer: ByteBuffer = ByteBuffer.wrap(commandApdu)
+        var Le: Int?
+
         this.cls = getUnsignedByte(buffer)
         this.instruction = Instruction.getMatching(getUnsignedByte(buffer))
         this.parameter1 = getUnsignedByte(buffer)
         this.parameter2 = getUnsignedByte(buffer)
-        if (this.instruction == Instruction.GET_RESPONSE) {
-            this.expectedLength = getUnsignedByte(buffer)
+        // FIXME: Le and Lc calculation should be based on general APDU structure
+        // instead of hard-coded INS values
+        if (this.instruction == Instruction.GET_RESPONSE || this.instruction == Instruction.INTERNAL_AUTHENTICATE) {
+            Le = getUnsignedByte(buffer)
             this.contentLength = null
             this.data = null
         }
@@ -137,12 +143,16 @@ class Apdu {
             this.data = ByteArray(this.contentLength)
             buffer.get(this.data)
             if (buffer.hasRemaining()) {
-                this.expectedLength = getUnsignedByte(buffer)
+                Le = getUnsignedByte(buffer)
             }
             else {
-                this.expectedLength = null
+                Le = null
             }
         }
+        if (Le == 0x00) {
+            Le = 256
+        }
+        this.expectedLength = Le
         this.status = null
     }
 
@@ -168,11 +178,12 @@ class Apdu {
 
         return (
                 """type: $messageType
-                |class: $cls
-                |instruction: $instruction
-                |parameter 1: $parameter1
-                |parameter 2: $parameter2
-                |content length: $contentLength
+                |CLS: $cls
+                |INS: $instruction
+                |P1: $parameter1
+                |P2: $parameter2
+                |Lc: $contentLength
+                |Le: $expectedLength
                 |data: $hexString
                 """.trimMargin())
     }
